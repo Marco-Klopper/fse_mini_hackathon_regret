@@ -9,15 +9,18 @@
   <body>
     <main class="container">
       <h1>Takeout vs Cooking Regret Meter</h1>
-      <p>Enter your takeout expense and see how much regret you might feel later.</p>
+      <p>Enter your takeout expense and discover the opportunity cost compared to home cooking.</p>
 
-      {% with messages = get_flashed_messages() %}
-      {% if messages %}
-      <div class="flash-message" role="alert">{{ messages[0] }}</div>
-      {% endif %}
-      {% endwith %}
+      <section class="section-card">
+        <h2>Calculate your Regret</h2>
 
-      <form action="{{ url_for('result') }}" method="post" novalidate>
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        <div class="flash-message" role="alert">{{ messages[0] }}</div>
+        {% endif %}
+        {% endwith %}
+
+        <form action="{{ url_for('result') }}" method="post" novalidate>
         <div class="field">
           <label for="amount">Takeout Price (R)</label>
           <input
@@ -52,6 +55,7 @@
 
         <button type="submit" class="btn">Calculate Regret</button>
       </form>
+      </section>
 
       <section class="notes">
         <h2>How it works</h2>
