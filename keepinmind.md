@@ -35,8 +35,10 @@ This document outlines dependencies, blockers, and integration points between th
       {
         "date": "2025-01-01",
         "gold_price": 150.25,
-        "silver_price": 25.50,
-        "monthly_gain": 12.5
+        "total_invested": 50,
+        "current_value": 52.3,
+        "total_gain": 2.3,
+        "gain_percent": 4.6
       }
     ],
     "category": "Burgers",
@@ -166,7 +168,7 @@ Key test files:
 
 2. **Graph Display**:
    - X-axis: Dates (last 12 months)
-   - Y-axis: Prices for gold and silver
+   - Y-axis: Price of gold (GLD)
    - Overlay: Monthly gains on hover
    - Use `graph_data` array from response
 

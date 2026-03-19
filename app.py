@@ -5,7 +5,11 @@ Main entry point for the takeout vs cooking at home regret meter.
 from flask import Flask, render_template, request, jsonify
 from models import db, UserInput, CommodityData
 from api_handler import fetch_commodity_data
-from calculations import calculate_regret_score
+from calculations import (
+    calculate_regret_score,
+    simulate_investment,
+    calculate_commodity_growth,
+)
 import os
 from datetime import datetime
 
@@ -68,19 +72,17 @@ def result():
         # Calculate difference saved
         difference_saved = takeout_price - home_price - delivery_fee
         
-        # Calculate commodity growth
-        if commodity_data:
-            commodity_growth = calculate_commodity_growth(commodity_data)
-        else:
-            commodity_growth = 0
-        
+        # Calculate investment returns using gold only
+        investment_data = simulate_investment(difference_saved, commodity_data)
+        commodity_growth = calculate_commodity_growth(investment_data) if investment_data else 0
+
         # Calculate regret score
         regret_score = calculate_regret_score(
             difference_saved=difference_saved,
             takeout_price=takeout_price,
             commodity_growth=commodity_growth
         )
-        
+
         # Store user input in database
         user_input = UserInput(
             price=takeout_price,
@@ -95,10 +97,10 @@ def result():
         )
         db.session.add(user_input)
         db.session.commit()
-        
-        # Prepare graph data
-        graph_data = prepare_graph_data(commodity_data, difference_saved)
-        
+
+        # Graph data uses only gold prices and investment returns
+        graph_data = investment_data
+
         return jsonify({
             'regret_score': regret_score,
             'difference_saved': difference_saved,
@@ -146,57 +148,6 @@ def get_home_price(category):
     raise ValueError(f'Category {category} not found')
 
 
-def calculate_commodity_growth(commodity_data):
-    """Calculate percentage growth of commodity prices over 12 months."""
-    if not commodity_data or len(commodity_data) < 2:
-        return 0
-    
-    # Sort by date to get oldest and newest
-    sorted_data = sorted(commodity_data, key=lambda x: x['date'])
-    oldest = sorted_data[0]
-    newest = sorted_data[-1]
-    
-    # Average prices
-    oldest_avg = (oldest['gold_price'] + oldest['silver_price']) / 2
-    newest_avg = (newest['gold_price'] + newest['silver_price']) / 2
-    
-    if oldest_avg == 0:
-        return 0
-    
-    growth = ((newest_avg - oldest_avg) / oldest_avg) * 100
-    return growth
-
-
-def prepare_graph_data(commodity_data, difference_saved):
-    """Prepare data for frontend graph visualization."""
-    if not commodity_data:
-        return []
-    
-    # Sort by date
-    sorted_data = sorted(commodity_data, key=lambda x: x['date'])
-    
-    graph_data = []
-    cumulative_investment = 0
-    
-    for i, data_point in enumerate(sorted_data):
-        average_price = (data_point['gold_price'] + data_point['silver_price']) / 2
-        
-        if i == 0:
-            initial_price = average_price
-            cumulative_investment = difference_saved
-            monthly_gain = 0
-        else:
-            price_change_percent = ((average_price - initial_price) / initial_price) * 100
-            monthly_gain = (cumulative_investment * price_change_percent) / 100
-        
-        graph_data.append({
-            'date': data_point['date'],
-            'gold_price': data_point['gold_price'],
-            'silver_price': data_point['silver_price'],
-            'monthly_gain': monthly_gain
-        })
-    
-    return graph_data
 
 
 if __name__ == '__main__':
