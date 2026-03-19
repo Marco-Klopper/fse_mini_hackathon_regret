@@ -24,9 +24,9 @@ def client():
 
     # Patch commodity data to avoid external API calls
     app.fetch_commodity_data = lambda: [
-        {'date': '2025-01-01', 'gold_price': 100},
-        {'date': '2025-02-01', 'gold_price': 105},
-        {'date': '2025-03-01', 'gold_price': 110},
+        {'date': '2025-01-01', 'price': 100},
+        {'date': '2025-02-01', 'price': 105},
+        {'date': '2025-03-01', 'price': 110},
     ]
 
     yield client
@@ -109,9 +109,9 @@ class TestResultRoute:
         """Test result route with valid input."""
         # Mock commodity data to avoid external API calls
         app.fetch_commodity_data = lambda: [
-            {'date': '2025-01-01', 'gold_price': 100},
-            {'date': '2025-02-01', 'gold_price': 105},
-            {'date': '2025-03-01', 'gold_price': 110},
+            {'date': '2025-01-01', 'price': 100},
+            {'date': '2025-02-01', 'price': 105},
+            {'date': '2025-03-01', 'price': 110},
         ]
 
         payload = {

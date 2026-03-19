@@ -96,13 +96,17 @@ class TestSimulateInvestment:
             {'date': '2025-02-01', 'gold_price': 110, 'silver_price': 11},
             {'date': '2025-03-01', 'gold_price': 120, 'silver_price': 12}
         ]
-        
+
         result = simulate_investment(50, monthly_data)
-        
+
         assert len(result) == 3
-        assert 'current_value' in result[0]
-        assert 'shares_held' in result[0]
-        assert result[0]['date'] == '2025-01-01'
+        assert result[0]['current_value'] == 50.0
+        assert result[0]['total_invested'] == 50.0
+        assert result[0]['gain_percent'] == 0.0
+        assert result[1]['current_value'] == 55.0
+        assert result[1]['gain_percent'] == 10.0
+        assert result[2]['current_value'] == 60.0
+        assert result[2]['gain_percent'] == 20.0
     
     def test_investment_with_zero_difference(self):
         """Test investment simulation with zero difference saved."""

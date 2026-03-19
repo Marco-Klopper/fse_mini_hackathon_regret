@@ -7,34 +7,62 @@ from datetime import datetime, timedelta
 import os
 
 # Alpha Vantage API configuration
+# Prefer environment variable to avoid committing secrets in source.
 ALPHA_VANTAGE_API_KEY = os.getenv('ALPHA_VANTAGE_API_KEY', 'demo')
 ALPHA_VANTAGE_URL = 'https://www.alphavantage.co/query'
 
-# Only gold (GLD) is used for investment growth calculations
+# S&P 500 ETF (SPY) is used for investment growth calculations
 CACHE_DURATION_HOURS = 24  # Cache data for 24 hours
 
 
 def fetch_commodity_data():
-    """
-    Fetch last 12 months of gold price data from Alpha Vantage or database cache.
+    """Fetch last 12 months of S&P 500 price data from Alpha Vantage or database cache.
 
     Returns:
-        list: List of dicts with date and gold_price for last 12 months
+        list: List of dicts with date and price for last 12 months
     """
     try:
         cached_data = get_cached_data()
         if cached_data:
             return cached_data
 
-        gold_data = fetch_symbol_data('GLD')
-        if not gold_data:
-            return get_cached_data(ignore_age=True)
+        spy_data = fetch_symbol_data('SPY')
+        if not spy_data:
+            # Fall back to cached data if API call fails
+            cached = get_cached_data(ignore_age=True)
+            return cached if cached else _sample_spy_history()
 
-        return build_gold_price_history(gold_data)
+        return build_spy_price_history(spy_data)
 
     except Exception as e:
         print(f'Error fetching commodity data: {str(e)}')
-        return get_cached_data(ignore_age=True)
+        cached = get_cached_data(ignore_age=True)
+        return cached if cached else _sample_spy_history()
+
+
+def _sample_spy_history():
+    """Generate a fallback 12-month S&P 500 (SPY) price history (for offline/dev use)."""
+    from datetime import datetime
+
+    # Generate 12 months of synthetic prices.
+    now = datetime.utcnow()
+    data = []
+    base_price = 450.0
+    for i in range(12, 0, -1):
+        dt = now.replace(day=1)
+        month = dt.month - i
+        year = dt.year
+        while month <= 0:
+            month += 12
+            year -= 1
+        date_str = f"{year:04d}-{month:02d}-01"
+        # Synthetic trend + volatility
+        price = base_price + (i * 2.5) + ((i % 3) * 3.0)
+        data.append({
+            'date': date_str,
+            'price': round(price, 2)
+        })
+    return data
 
 
 def fetch_symbol_data(symbol):
@@ -106,44 +134,34 @@ def cache_price_data(symbol, date_str, price_data):
 
 
 def get_cached_data(ignore_age=False):
-    """Get cached gold data from database."""
+    """Get cached S&P 500 (SPY) data from database."""
     try:
         cutoff_date = datetime.utcnow() - timedelta(hours=CACHE_DURATION_HOURS)
 
         if ignore_age:
-            gold_data = CommodityData.query.filter_by(symbol='GLD').all()
+            spy_data = CommodityData.query.filter_by(symbol='SPY').all()
         else:
-            gold_data = CommodityData.query.filter_by(symbol='GLD').filter(
+            spy_data = CommodityData.query.filter_by(symbol='SPY').filter(
                 CommodityData.fetched_at >= cutoff_date
             ).all()
 
-        if not gold_data:
+        if not spy_data:
             return None
 
-        gold_dict = {d.date: d.close_price for d in gold_data}
-        sorted_dates = sorted(gold_dict.keys(), reverse=True)[:12]
-        sorted_dates = sorted(sorted_dates)
-
-        return [
-            {
-                'date': date,
-                'gold_price': gold_dict[date]
-            }
-            for date in sorted_dates
-        ] if len(sorted_dates) >= 12 else None
+        return spy_data
 
     except Exception as e:
         print(f'Error retrieving cached data: {str(e)}')
         return None
 
 
-def build_gold_price_history(gold_data):
-    """Build a chronological list of gold prices for the last 12 months."""
-    common_dates = sorted(gold_data.keys(), reverse=True)[:12]
+def build_spy_price_history(spy_data):
+    """Build a chronological list of S&P 500 prices for the last 12 months."""
+    common_dates = sorted(spy_data.keys(), reverse=True)[:12]
     common_dates = sorted(common_dates)
 
     return [
-        {'date': date, 'gold_price': float(gold_data[date].get('4. close', 0))}
+        {'date': date, 'price': float(spy_data[date].get('4. close', 0))}
         for date in common_dates
     ]
 

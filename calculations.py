@@ -35,12 +35,12 @@ def calculate_regret_score(difference_saved, takeout_price, commodity_growth):
     return round(regret_score, 2)
 
 
-def _extract_gold_price(data_point):
-    """Extract gold price from a data point."""
-    if 'gold_price' in data_point:
-        return float(data_point.get('gold_price', 0))
+def _extract_price(data_point):
+    """Extract commodity price from a data point (supports gold_price, price, or legacy fields)."""
     if 'price' in data_point:
         return float(data_point.get('price', 0))
+    if 'gold_price' in data_point:
+        return float(data_point.get('gold_price', 0))
     # Fallback: average of gold and silver if both present (legacy)
     gold = float(data_point.get('gold_price', 0) or 0)
     silver = float(data_point.get('silver_price', 0) or 0)
@@ -48,59 +48,68 @@ def _extract_gold_price(data_point):
 
 
 def simulate_investment(difference_saved, monthly_commodity_data):
-    """
-    Simulate monthly investment returns if the saved money was invested in gold.
+    """Simulate investment returns if the saved money is invested in a commodity (e.g., S&P 500 ETF) once.
+
+    This treats `difference_saved` as a one-time investment at the first available
+    month's commodity price, then values the position over time as the price moves.
 
     Args:
-        difference_saved (float): Amount saved each month
-        monthly_commodity_data (list): List of dicts with 'date' and 'gold_price'
+        difference_saved (float): One-time savings amount to invest
+        monthly_commodity_data (list): List of dicts with 'date' and 'price' (or 'gold_price' for legacy)
 
     Returns:
-        list: List of investment snapshots for each month
+        list: Investment snapshots for each month
     """
     if not monthly_commodity_data or difference_saved <= 0:
         return []
 
-    investment_values = []
-    total_shares = 0.0
-    total_invested = 0.0
-
     # Sort by date chronologically
     sorted_data = sorted(monthly_commodity_data, key=lambda x: x['date'])
 
+    first_price = _extract_price(sorted_data[0])
+    if first_price <= 0:
+        return []
+
+    shares_bought = difference_saved / first_price
+
+    investment_values = []
     for data_point in sorted_data:
-        price = _extract_gold_price(data_point)
+        price = _extract_price(data_point)
         if price <= 0:
             continue
 
-        total_invested += difference_saved
-        shares_bought = difference_saved / price
-        total_shares += shares_bought
-
-        current_value = total_shares * price
-        total_gain = current_value - total_invested
-        gain_percent = (total_gain / total_invested) * 100 if total_invested > 0 else 0
+        current_value = shares_bought * price
+        total_gain = current_value - difference_saved
+        gain_percent = (total_gain / difference_saved) * 100 if difference_saved > 0 else 0
 
         investment_values.append({
             'date': data_point['date'],
-            'gold_price': round(price, 2),
-            'total_invested': round(total_invested, 2),
+            'price': round(price, 2),
+            'total_invested': round(difference_saved, 2),
             'current_value': round(current_value, 2),
             'total_gain': round(total_gain, 2),
             'gain_percent': round(gain_percent, 2),
-            'shares_held': round(total_shares, 6)
+            'shares_held': round(shares_bought, 6)
         })
 
     return investment_values
 
 
 def calculate_commodity_growth(investment_data):
-    """Calculate overall growth percentage for the investment data."""
+    """Calculate overall commodity growth percentage for an investment series."""
     if not investment_data:
         return 0
 
+    first = investment_data[0]
     last = investment_data[-1]
-    return last.get('gain_percent', 0)
+
+    first_price = first.get('price') or first.get('gold_price', 0)
+    last_price = last.get('price') or last.get('gold_price', 0)
+
+    if first_price <= 0:
+        return 0
+
+    return ((last_price - first_price) / first_price) * 100
 
 
 def calculate_regret_level(regret_score):
