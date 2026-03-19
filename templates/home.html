@@ -2,171 +2,88 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Regret Meter</title>
-    <style>
-      body {
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        max-width: 880px;
-        margin: 2rem auto;
-        padding: 0 1rem;
-      }
-
-      header {
-        display: flex;
-        gap: 1rem;
-        align-items: baseline;
-      }
-
-      h1 {
-        margin: 0;
-        font-size: 1.8rem;
-      }
-
-      form {
-        margin-top: 1.5rem;
-        display: grid;
-        gap: 1rem;
-      }
-
-      label {
-        font-weight: 600;
-      }
-
-      input,
-      select {
-        padding: 0.6rem 0.75rem;
-        border: 1px solid #ccc;
-        border-radius: 6px;
-        width: 100%;
-        box-sizing: border-box;
-      }
-
-      .row {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 1rem;
-      }
-
-      button {
-        padding: 0.75rem 1rem;
-        border: none;
-        border-radius: 8px;
-        background: #2563eb;
-        color: white;
-        font-weight: 700;
-        cursor: pointer;
-      }
-
-      button:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
-
-      .result {
-        margin-top: 2rem;
-        padding: 1.25rem;
-        border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        background: #f8fafc;
-      }
-
-      .result h2 {
-        margin-top: 0;
-      }
-
-      .result pre {
-        overflow-x: auto;
-        background: #f1f5f9;
-        padding: 1rem;
-        border-radius: 10px;
-      }
-
-      .hidden {
-        display: none;
-      }
-
-      .status {
-        margin-top: 1rem;
-        color: #64748b;
-        font-size: 0.95rem;
-      }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
   </head>
   <body>
-    <header>
-      <h1>Regret Meter</h1>
-      <p>Calculate how much you might regret ordering takeout vs cooking.</p>
-    </header>
-
-    <form id="regretForm">
-      <div class="row">
+    <main class="container">
+      <div class="heading-row">
         <div>
-          <label for="takeoutPrice">Takeout Price</label>
-          <input id="takeoutPrice" name="price" type="number" min="0" step="0.01" required />
+          <h1>Regret Meter</h1>
+          <p class="lead">Calculate the true cost of takeout vs cooking at home and explore potential savings.</p>
         </div>
-        <div>
-          <label for="category">Category</label>
-          <select id="category" name="category" required>
-            <option value="" disabled selected>Select category</option>
-            {% for cat in categories %}
-            <option value="{{ cat.name }}">{{ cat.name }}</option>
-            {% endfor %}
-          </select>
-        </div>
+        <span class="badge">Smart Budgeting</span>
       </div>
 
-      <div class="row">
-        <div>
-          <label for="deliveryOption">Delivery Option</label>
-          <select id="deliveryOption" name="delivery_option" required>
-            <option value="pickup">Pickup (no extra fee)</option>
-            <option value="delivery">Delivery (+50)</option>
-          </select>
+      <section class="section-card">
+        <h2>Tell us your order</h2>
+        <p>Enter your takeout price, category and delivery choice. We’ll estimate regret and investment opportunity.</p>
+
+        <form id="regretForm">
+          <div class="field">
+            <label for="takeoutPrice">Takeout Price (R)</label>
+            <input id="takeoutPrice" name="price" type="number" min="0" step="0.01" placeholder="e.g. 120.00" required />
+          </div>
+
+          <div class="field">
+            <label for="category">Category</label>
+            <select id="category" name="category" required>
+              <option value="" disabled selected>Select category</option>
+              {% for cat in categories %}
+              <option value="{{ cat.name }}">{{ cat.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="deliveryOption">Delivery Option</label>
+            <select id="deliveryOption" name="delivery_option" required>
+              <option value="pickup">Pickup (R0)</option>
+              <option value="delivery">Delivery (+R50)</option>
+            </select>
+          </div>
+
+          <button id="submitBtn" type="submit" class="btn">Calculate Regret</button>
+          <p class="status" id="statusText">Enter your values and click Calculate.</p>
+        </form>
+      </section>
+
+      <section class="section-card hidden" id="resultSection">
+        <h2>Results</h2>
+
+        <div class="score-card" style="border-color: #0ea5e9;">
+          <div class="score-title" id="regretScore">0/100</div>
+          <div class="score-level" id="regretLevel">Awaiting input</div>
         </div>
-        <div style="align-self: end;">
-          <button id="submitBtn" type="submit">Calculate Regret</button>
+
+        <div class="summary">
+          <p><strong>Difference saved:</strong> <span id="differenceSaved">-</span></p>
+          <p><strong>Commodity growth estimate:</strong> <span id="commodityGrowth">-</span></p>
         </div>
-      </div>
 
-      <p class="status" id="statusText">Enter values and click calculate.</p>
-    </form>
+        <h3>Investment simulation</h3>
+        <div class="chart-container">
+          <canvas id="investmentChart" width="800" height="400"></canvas>
+        </div>
 
-    <section class="result hidden" id="resultSection">
-      <h2>Results</h2>
-      <p>
-        <strong>Regret score:</strong>
-        <span id="regretScore"></span>
-      </p>
-      <p>
-        <strong>Difference saved:</strong>
-        <span id="differenceSaved"></span>
-      </p>
-      <p>
-        <strong>Commodity growth (S&P 500):</strong>
-        <span id="commodityGrowth"></span>
-      </p>
-
-      <h3>Investment Simulation (S&P 500)</h3>
-      <div class="chart-container">
-        <canvas id="investmentChart" width="600" height="320"></canvas>
-      </div>
-
-      <h3>Monthly Breakdown</h3>
-      <div class="table-container">
-        <table id="investmentTable">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>SPY price</th>
-              <th>Portfolio value</th>
-              <th>Gain %</th>
-              <th>Gain amount</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </section>
+        <h3>Monthly breakdown</h3>
+        <div class="table-container">
+          <table id="investmentTable">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Index price</th>
+                <th>Portfolio value</th>
+                <th>Gain %</th>
+                <th>Gain amount</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
     <script>
@@ -174,6 +91,7 @@
       const statusText = document.getElementById('statusText');
       const resultSection = document.getElementById('resultSection');
       const regretScoreEl = document.getElementById('regretScore');
+      const regretLevelEl = document.getElementById('regretLevel');
       const differenceSavedEl = document.getElementById('differenceSaved');
       const commodityGrowthEl = document.getElementById('commodityGrowth');
       const submitBtn = document.getElementById('submitBtn');
@@ -184,26 +102,33 @@
 
       function setStatus(text, isError = false) {
         statusText.textContent = text;
-        statusText.style.color = isError ? '#b91c1c' : '#64748b';
+        statusText.style.color = isError ? '#dc2626' : '#64748b';
       }
 
       function formatCurrency(value) {
-        return value.toLocaleString(undefined, {
-          style: 'currency',
-          currency: 'USD',
+        if (typeof value !== 'number') return '-';
+        return 'R ' + value.toLocaleString(undefined, {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2
         });
       }
 
       function formatPercent(value) {
+        if (typeof value !== 'number') return '-';
         return `${value.toFixed(2)}%`;
+      }
+
+      function setRegretLevel(score) {
+        if (score >= 85) return 'High regret';
+        if (score >= 60) return 'Medium regret';
+        if (score >= 30) return 'Low regret';
+        return 'Minimal regret';
       }
 
       function renderChart(data) {
         const labels = data.map((row) => row.date);
-        const spyPrices = data.map((row) => row.price || row.gold_price);
-        const portfolioValues = data.map((row) => row.current_value);
+        const prices = data.map((row) => row.price || row.gold_price || 0);
+        const values = data.map((row) => row.current_value || 0);
 
         const config = {
           type: 'line',
@@ -211,70 +136,41 @@
             labels,
             datasets: [
               {
-                label: 'S&P 500 Price',
-                data: spyPrices,
-                borderColor: '#2563eb',
-                backgroundColor: 'rgba(37, 99, 235, 0.15)',
+                label: 'Commodity price',
+                data: prices,
+                borderColor: '#0ea5e9',
+                backgroundColor: 'rgba(14, 165, 233, 0.16)',
+                fill: false,
                 tension: 0.25,
-                yAxisID: 'y',
               },
               {
-                label: 'Portfolio Value',
-                data: portfolioValues,
+                label: 'Projected portfolio',
+                data: values,
                 borderColor: '#16a34a',
-                backgroundColor: 'rgba(22, 163, 74, 0.15)',
+                backgroundColor: 'rgba(22, 163, 74, 0.18)',
+                fill: false,
                 tension: 0.25,
-                yAxisID: 'y1',
               }
             ]
           },
           options: {
             responsive: true,
-            interaction: {
-              mode: 'index',
-              intersect: false
-            },
-            scales: {
-              y: {
-                type: 'linear',
-                position: 'left',
-                title: {
-                  display: true,
-                  text: 'S&P 500 Price'
-                }
-              },
-              y1: {
-                type: 'linear',
-                position: 'right',
-                title: {
-                  display: true,
-                  text: 'Portfolio Value'
-                },
-                grid: {
-                  drawOnChartArea: false
-                }
-              }
-            },
             plugins: {
-              legend: {
-                position: 'top'
-              },
+              legend: { position: 'top' },
               tooltip: {
-                callbacks: {
-                  label: function(context) {
-                    const label = context.dataset.label || '';
-                    const value = context.parsed.y;
-                    return `${label}: ${formatCurrency(value)}`;
-                  }
-                }
+                mode: 'index',
+                intersect: false
               }
+            },
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+              x: { title: { display: true, text: 'Month' } },
+              y: { title: { display: true, text: 'Value' } }
             }
           }
         };
 
-        if (investmentChart) {
-          investmentChart.destroy();
-        }
+        if (investmentChart) investmentChart.destroy();
         investmentChart = new Chart(chartCanvas, config);
       }
 
@@ -301,33 +197,29 @@
         const deliveryOption = document.getElementById('deliveryOption').value;
 
         if (!price || !category) {
-          setStatus('Please fill in all fields.', true);
+          setStatus('Please complete all fields before calculating.', true);
           return;
         }
 
         submitBtn.disabled = true;
-        setStatus('Calculating…');
+        setStatus('Calculating your regret score…');
 
         try {
           const res = await fetch('/result', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              price,
-              category,
-              delivery_option: deliveryOption
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ price, category, delivery_option: deliveryOption })
           });
 
           if (!res.ok) {
             const body = await res.json();
-            throw new Error(body.error || 'Unexpected error');
+            throw new Error(body.error || 'Unable to calculate now.');
           }
 
           const data = await res.json();
-          regretScoreEl.textContent = data.regret_score;
+
+          regretScoreEl.textContent = `${data.regret_score} / 100`;
+          regretLevelEl.textContent = setRegretLevel(data.regret_score);
           differenceSavedEl.textContent = formatCurrency(data.difference_saved);
           commodityGrowthEl.textContent = formatPercent(data.commodity_growth);
 
@@ -335,9 +227,9 @@
           renderTable(data.graph_data);
 
           resultSection.classList.remove('hidden');
-          setStatus('Calculation complete. Scroll down for results.');
+          setStatus('Done! Scroll to review your results.');
         } catch (err) {
-          setStatus(err.message || 'Failed to calculate regret.', true);
+          setStatus(err.message, true);
           resultSection.classList.add('hidden');
         } finally {
           submitBtn.disabled = false;

@@ -8,11 +8,17 @@
   </head>
   <body>
     <main class="container">
-      <h1>Takeout vs Cooking Regret Meter</h1>
-      <p>Enter your takeout expense and discover the opportunity cost compared to home cooking.</p>
+      <div class="heading-row">
+        <div>
+          <h1>Takeout vs Cooking Regret Meter</h1>
+          <p>Enter your takeout expense and discover the opportunity cost compared to home cooking.</p>
+        </div>
+        <span class="badge">Insight Score</span>
+      </div>
 
       <section class="section-card">
-        <h2>Calculate your Regret</h2>
+        <h2>Calculate your regret</h2>
+        <p>Enter your details and get a clear risk score, plus investment projection in gold/silver.</p>
 
         {% with messages = get_flashed_messages() %}
         {% if messages %}
@@ -21,7 +27,7 @@
         {% endwith %}
 
         <form action="{{ url_for('result') }}" method="post" novalidate>
-        <div class="field">
+          <div class="field">
           <label for="amount">Takeout Price (R)</label>
           <input
             id="amount"

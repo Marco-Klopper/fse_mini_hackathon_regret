@@ -9,7 +9,11 @@
   </head>
   <body>
     <main class="container">
-      <a href="{{ url_for('home') }}" class="back">← Back</a>
+      <div class="heading-row">
+        <a href="{{ url_for('home') }}" class="back">← Change input</a>
+        <span class="badge">Regret Insight</span>
+      </div>
+
       <h1>Regret Score</h1>
 
       <div class="score-card" style="border-color: {{ regret_color }};">
@@ -20,28 +24,22 @@
       <section class="section-card summary">
         <h2>Summary</h2>
         <p>
-          You spent <strong>R{{ amount }}</strong> on <strong>{{ category }}</strong>
-          with <strong>{{ delivery }}</strong>. Home cost: R{{ home_cost }}; fee: R{{ fee }}.
+          Spent: <strong>R{{ amount }}</strong> on <strong>{{ category }}</strong> (<em>{{ delivery }}</em>). Home cost: R{{ home_cost }}, fee: R{{ fee }}.
         </p>
         <p>Potential savings: <strong>R{{ difference_saved }}</strong>.</p>
-        <p>
-          If invested in commodities, the 12-month average growth was
-          <strong>{{ commodity_growth }}%</strong>.
-        </p>
+        <p>Commodity return estimate (12 months): <strong>{{ commodity_growth }}%</strong>.</p>
       </section>
 
       <section class="section-card chart-wrap">
-        <h2>Commodity Price Trend (Last 12 Months)</h2>
-        <canvas id="commodityChart" width="800" height="400"></canvas>
+        <h2>Commodity Price Trend (12m)</h2>
+        <div class="chart-container">
+          <canvas id="commodityChart" width="800" height="400"></canvas>
+        </div>
+        <p class="chart-note">Hover on points for invested value projection.</p>
       </section>
 
       <section class="section-card gains">
-        <h2>Commodity Price Trend (Last 12 Months)</h2>
-        <canvas id="commodityChart" width="800" height="400"></canvas>
-      </section>
-
-      <section class="gains">
-        <h2>Simulated monthly invested value</h2>
+        <h2>Monthly Investment Growth</h2>
         <ul>
           {% for item in monthly_gains %}
           <li>{{ item.month }}: R{{ item.value }}</li>
@@ -52,15 +50,14 @@
 
     <script>
       const commoditySeries = {{ commodity_series | tojson }};
-      const amount = {{ amount }};
       const monthlyGains = {{ monthly_gains | tojson }};
+      const ctx = document.getElementById('commodityChart').getContext('2d');
 
       const labels = commoditySeries.map((item) => item.month);
       const goldData = commoditySeries.map((item) => item.gold);
       const silverData = commoditySeries.map((item) => item.silver);
 
-      const ctx = document.getElementById('commodityChart').getContext('2d');
-      const chart = new Chart(ctx, {
+      new Chart(ctx, {
         type: 'line',
         data: {
           labels,
@@ -69,27 +66,21 @@
               label: 'Gold (USD)',
               data: goldData,
               borderColor: '#F4C430',
-              backgroundColor: 'rgba(244, 196, 48, .2)',
-              fill: false,
+              backgroundColor: 'rgba(244, 196, 48, .25)',
               tension: 0.2,
             },
             {
               label: 'Silver (USD)',
               data: silverData,
-              borderColor: '#C0C0C0',
-              backgroundColor: 'rgba(192, 192, 192, .2)',
-              fill: false,
+              borderColor: '#8b8b9a',
+              backgroundColor: 'rgba(156, 163, 175, .25)',
               tension: 0.2,
             },
           ],
         },
         options: {
           responsive: true,
-          interaction: {
-            mode: 'nearest',
-            axis: 'x',
-            intersect: false,
-          },
+          interaction: { mode: 'nearest', intersect: false },
           plugins: {
             tooltip: {
               callbacks: {
@@ -98,27 +89,14 @@
                   if (monthlyGains[idx]) {
                     return `Projected invested value: R${monthlyGains[idx].value}`;
                   }
-                  return undefined;
                 },
               },
             },
-            legend: {
-              position: 'top',
-            },
+            legend: { position: 'top' },
           },
           scales: {
-            x: {
-              title: {
-                display: true,
-                text: 'Month',
-              },
-            },
-            y: {
-              title: {
-                display: true,
-                text: 'Price (USD)',
-              },
-            },
+            x: { title: { display: true, text: 'Month' } },
+            y: { title: { display: true, text: 'Price (USD)' } },
           },
         },
       });
