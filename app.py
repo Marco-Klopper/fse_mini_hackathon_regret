@@ -1,207 +1,203 @@
-from datetime import datetime
+"""
+Regret Meter Flask Application
+Main entry point for the takeout vs cooking at home regret meter.
+"""
+from flask import Flask, render_template, request, jsonify
+from models import db, UserInput, CommodityData
+from api_handler import fetch_commodity_data
+from calculations import calculate_regret_score
 import os
-import requests
-
-from flask import Flask, render_template, request, redirect, url_for, flash
-from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'dev_secret')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///regret.db'
+
+# Configuration
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{BASE_DIR}/regret_meter.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-db = SQLAlchemy(app)
+# Initialize database
+db.init_app(app)
 
-class UserInput(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    amount = db.Column(db.Float, nullable=False)
-    category = db.Column(db.String(80), nullable=False)
-    delivery = db.Column(db.String(20), nullable=False)
-    regret_score = db.Column(db.Float, nullable=False)
-    generated_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-# Home made baseline prices by category
-HOME_PRICES = {
-    'burgers': 45.0,
-    'pizza': 35.0,
-    'chinese': 40.0,
-    'coffee': 20.0,
-    'other': 30.0,
-}
-
-DELIVERY_FEE = 50.0
-
-# static last 12 month data (mock values). Format: {month label, gold, silver}
-DEFAULT_COMMODITY_SERIES = [
-    {'month': '2024-04', 'gold': 200.5, 'silver': 22.4},
-    {'month': '2024-05', 'gold': 203.0, 'silver': 23.1},
-    {'month': '2024-06', 'gold': 198.7, 'silver': 22.8},
-    {'month': '2024-07', 'gold': 204.4, 'silver': 23.6},
-    {'month': '2024-08', 'gold': 211.1, 'silver': 24.3},
-    {'month': '2024-09', 'gold': 209.9, 'silver': 24.0},
-    {'month': '2024-10', 'gold': 212.7, 'silver': 25.0},
-    {'month': '2024-11', 'gold': 215.3, 'silver': 25.7},
-    {'month': '2024-12', 'gold': 219.8, 'silver': 26.5},
-    {'month': '2025-01', 'gold': 222.0, 'silver': 26.0},
-    {'month': '2025-02', 'gold': 224.6, 'silver': 26.9},
-    {'month': '2025-03', 'gold': 228.1, 'silver': 27.2},
-]
+with app.app_context():
+    db.create_all()
 
 
-def get_commodity_series():
-    api_key = os.getenv('ALPHAVANTAGE_API_KEY')
-    if not api_key:
-        return DEFAULT_COMMODITY_SERIES
-
-    def fetch(symbol):
-        url = 'https://www.alphavantage.co/query'
-        params = {
-            'function': 'TIME_SERIES_MONTHLY',
-            'symbol': symbol,
-            'apikey': api_key,
-        }
-        try:
-            r = requests.get(url, params=params, timeout=10)
-            r.raise_for_status()
-            data = r.json()
-            timeseries = data.get('Monthly Time Series', {})
-            if not timeseries:
-                return None
-            # sort descending date and take last 12 months oldest to newest.
-            dates = sorted(timeseries.keys())[-12:]
-            return [
-                {
-                    'month': d,
-                    'gold': float(timeseries[d]['4. close']) if symbol == 'GLD' else None,
-                    'silver': float(timeseries[d]['4. close']) if symbol == 'SLV' else None,
-                }
-                for d in dates
-            ]
-        except Exception:
-            return None
-
-    gld = fetch('GLD')
-    slv = fetch('SLV')
-
-    if not gld or not slv or len(gld) != len(slv):
-        return DEFAULT_COMMODITY_SERIES
-
-    merged = []
-    for i in range(len(gld)):
-        merged.append({'month': gld[i]['month'], 'gold': gld[i]['gold'], 'silver': slv[i]['silver']})
-
-    return merged
-
-
-def compute_regret(amount, category, delivery):
-    home_cost = HOME_PRICES.get(category, HOME_PRICES['other'])
-    fee = DELIVERY_FEE if delivery == 'delivery' else 0.0
-
-    difference_saved = max(amount - home_cost - fee, 0.0)
-    savings_ratio = 0.0
-    if amount > 0:
-        savings_ratio = (difference_saved / amount) * 100
-
-    series = get_commodity_series()
-    gold_start = series[0]['gold']
-    gold_end = series[-1]['gold']
-    silver_start = series[0]['silver']
-    silver_end = series[-1]['silver']
-
-    gold_growth = ((gold_end - gold_start) / gold_start * 100) if gold_start else 0.0
-    silver_growth = ((silver_end - silver_start) / silver_start * 100) if silver_start else 0.0
-    commodity_growth = (gold_growth + silver_growth) / 2.0
-
-    # reg formula from plan
-    raw_score = (savings_ratio) + (commodity_growth / 2.0)
-    regret_score = min(100.0, max(0.0, raw_score))
-
-    # Determine regret level
-    if regret_score < 20:
-        level = 'Low regret'
-        color = 'var(--low)'
-    elif regret_score < 50:
-        level = 'Mild regret'
-        color = 'var(--medium)'
-    elif regret_score < 80:
-        level = 'Risky decision'
-        color = 'var(--high)'
-    else:
-        level = 'High regret'
-        color = 'var(--critical)'
-
-    # Simulate cumulative gains each month for difference_saved investment
-    monthly_gains = []
-    investment = difference_saved
-    if investment <= 0:
-        investment = 0
-
-    cumulative_invested = 0
-    for idx, point in enumerate(series, start=1):
-        if idx == 1:
-            cumulative_invested = investment
-        else:
-            previous = series[idx-2]
-            monthly_gain_pct = ((point['gold'] / previous['gold'] - 1.0) +
-                                 (point['silver'] / previous['silver'] - 1.0)) / 2.0
-            cumulative_invested *= 1 + monthly_gain_pct
-        monthly_gains.append({'month': point['month'], 'value': round(cumulative_invested, 2)})
-
-    return {
-        'amount': amount,
-        'category': category,
-        'delivery': delivery,
-        'home_cost': home_cost,
-        'fee': fee,
-        'difference_saved': round(difference_saved, 2),
-        'savings_ratio': round(savings_ratio, 2),
-        'commodity_growth': round(commodity_growth, 2),
-        'regret_score': round(regret_score, 2),
-        'regret_level': level,
-        'regret_color': color,
-        'monthly_gains': monthly_gains,
-        'commodity_series': series,
-    }
-
-
-@app.route('/')
+@app.route('/', methods=['GET'])
 def home():
-    return render_template('index.html')
+    """Home page - input form for takeout meal."""
+    try:
+        # Load categories from CSV
+        categories = load_categories()
+        return render_template('home.html', categories=categories)
+    except Exception as e:
+        return jsonify({'error': f'Error loading categories: {str(e)}'}), 500
 
 
 @app.route('/result', methods=['POST'])
 def result():
+    """
+    Result page - display regret score and commodity price graph.
+    Expected JSON payload:
+    {
+        "price": float,
+        "category": str,
+        "delivery_option": str (delivery/pickup)
+    }
+    """
     try:
-        amount = float(request.form.get('amount', '0'))
-    except ValueError:
-        amount = None
-
-    if amount is None or amount <= 0:
-        flash('Please enter a valid positive amount for takeout price.')
-        return redirect(url_for('home'))
-
-    category = request.form.get('category', 'other')
-    delivery = request.form.get('delivery', 'pickup')
-
-    result_data = compute_regret(amount, category, delivery)
-
-    # save to DB (optional)
-    try:
-        record = UserInput(
-            amount=result_data['amount'],
-            category=category,
-            delivery=delivery,
-            regret_score=result_data['regret_score'],
+        data = request.get_json()
+        
+        # Validate input
+        if not all(key in data for key in ['price', 'category', 'delivery_option']):
+            return jsonify({'error': 'Missing required fields'}), 400
+        
+        takeout_price = float(data['price'])
+        category = data['category']
+        delivery_option = data['delivery_option']
+        
+        # Fetch commodity data (last 12 months)
+        commodity_data = fetch_commodity_data()
+        
+        # Load home price for category
+        home_price = get_home_price(category)
+        
+        # Calculate delivery fee
+        delivery_fee = 50 if delivery_option.lower() == 'delivery' else 0
+        
+        # Calculate difference saved
+        difference_saved = takeout_price - home_price - delivery_fee
+        
+        # Calculate commodity growth
+        if commodity_data:
+            commodity_growth = calculate_commodity_growth(commodity_data)
+        else:
+            commodity_growth = 0
+        
+        # Calculate regret score
+        regret_score = calculate_regret_score(
+            difference_saved=difference_saved,
+            takeout_price=takeout_price,
+            commodity_growth=commodity_growth
         )
-        db.session.add(record)
+        
+        # Store user input in database
+        user_input = UserInput(
+            price=takeout_price,
+            category=category,
+            delivery_option=delivery_option,
+            home_price=home_price,
+            delivery_fee=delivery_fee,
+            difference_saved=difference_saved,
+            commodity_growth=commodity_growth,
+            regret_score=regret_score,
+            created_at=datetime.utcnow()
+        )
+        db.session.add(user_input)
         db.session.commit()
-    except Exception:
-        db.session.rollback()
+        
+        # Prepare graph data
+        graph_data = prepare_graph_data(commodity_data, difference_saved)
+        
+        return jsonify({
+            'regret_score': regret_score,
+            'difference_saved': difference_saved,
+            'commodity_growth': commodity_growth,
+            'graph_data': graph_data,
+            'category': category,
+            'takeout_price': takeout_price,
+            'home_price': home_price,
+            'delivery_fee': delivery_fee
+        })
+    
+    except ValueError as e:
+        return jsonify({'error': f'Invalid input: {str(e)}'}), 400
+    except Exception as e:
+        return jsonify({'error': f'Error calculating regret score: {str(e)}'}), 500
 
-    return render_template('result.html', **result_data)
+
+def load_categories():
+    """Load food categories from CSV file."""
+    categories = []
+    csv_path = os.path.join(BASE_DIR, 'categories.csv')
+    
+    if not os.path.exists(csv_path):
+        return []
+    
+    with open(csv_path, 'r') as f:
+        lines = f.readlines()[1:]  # Skip header
+        for line in lines:
+            parts = line.strip().split(',')
+            if len(parts) >= 2:
+                categories.append({
+                    'name': parts[0].strip(),
+                    'home_price': float(parts[1].strip())
+                })
+    
+    return categories
+
+
+def get_home_price(category):
+    """Get home-cooked price for a category."""
+    categories = load_categories()
+    for cat in categories:
+        if cat['name'].lower() == category.lower():
+            return cat['home_price']
+    raise ValueError(f'Category {category} not found')
+
+
+def calculate_commodity_growth(commodity_data):
+    """Calculate percentage growth of commodity prices over 12 months."""
+    if not commodity_data or len(commodity_data) < 2:
+        return 0
+    
+    # Sort by date to get oldest and newest
+    sorted_data = sorted(commodity_data, key=lambda x: x['date'])
+    oldest = sorted_data[0]
+    newest = sorted_data[-1]
+    
+    # Average prices
+    oldest_avg = (oldest['gold_price'] + oldest['silver_price']) / 2
+    newest_avg = (newest['gold_price'] + newest['silver_price']) / 2
+    
+    if oldest_avg == 0:
+        return 0
+    
+    growth = ((newest_avg - oldest_avg) / oldest_avg) * 100
+    return growth
+
+
+def prepare_graph_data(commodity_data, difference_saved):
+    """Prepare data for frontend graph visualization."""
+    if not commodity_data:
+        return []
+    
+    # Sort by date
+    sorted_data = sorted(commodity_data, key=lambda x: x['date'])
+    
+    graph_data = []
+    cumulative_investment = 0
+    
+    for i, data_point in enumerate(sorted_data):
+        average_price = (data_point['gold_price'] + data_point['silver_price']) / 2
+        
+        if i == 0:
+            initial_price = average_price
+            cumulative_investment = difference_saved
+            monthly_gain = 0
+        else:
+            price_change_percent = ((average_price - initial_price) / initial_price) * 100
+            monthly_gain = (cumulative_investment * price_change_percent) / 100
+        
+        graph_data.append({
+            'date': data_point['date'],
+            'gold_price': data_point['gold_price'],
+            'silver_price': data_point['silver_price'],
+            'monthly_gain': monthly_gain
+        })
+    
+    return graph_data
 
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-    app.run(debug=True)
+    app.run(debug=True, host='127.0.0.1', port=5000)
