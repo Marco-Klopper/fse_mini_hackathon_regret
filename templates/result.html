@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Result - Regret Meter</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body>
+    <main class="container">
+      <a href="{{ url_for('home') }}" class="back">← Back</a>
+      <h1>Regret Score</h1>
+
+      <div class="score-card" style="border-color: {{ regret_color }};">
+        <div class="score-title">{{ regret_score }} / 100</div>
+        <div class="score-level">{{ regret_level }}</div>
+      </div>
+
+      <section class="summary">
+        <p>
+          You spent <strong>R{{ amount }}</strong> on <strong>{{ category }}</strong>
+          with <strong>{{ delivery }}</strong>. Home cost: R{{ home_cost }}; fee: R{{ fee }}.
+        </p>
+        <p>Potential savings: <strong>R{{ difference_saved }}</strong>.</p>
+        <p>
+          If invested in commodities, the 12-month average growth was
+          <strong>{{ commodity_growth }}%</strong>.
+        </p>
+      </section>
+
+      <section class="chart-wrap">
+        <h2>Commodity Price Trend (Last 12 Months)</h2>
+        <canvas id="commodityChart" width="800" height="400"></canvas>
+      </section>
+
+      <section class="gains">
+        <h2>Simulated monthly invested value</h2>
+        <ul>
+          {% for item in monthly_gains %}
+          <li>{{ item.month }}: R{{ item.value }}</li>
+          {% endfor %}
+        </ul>
+      </section>
+    </main>
+
+    <script>
+      const commoditySeries = {{ commodity_series | tojson }};
+      const amount = {{ amount }};
+      const monthlyGains = {{ monthly_gains | tojson }};
+
+      const labels = commoditySeries.map((item) => item.month);
+      const goldData = commoditySeries.map((item) => item.gold);
+      const silverData = commoditySeries.map((item) => item.silver);
+
+      const ctx = document.getElementById('commodityChart').getContext('2d');
+      const chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Gold (USD)',
+              data: goldData,
+              borderColor: '#F4C430',
+              backgroundColor: 'rgba(244, 196, 48, .2)',
+              fill: false,
+              tension: 0.2,
+            },
+            {
+              label: 'Silver (USD)',
+              data: silverData,
+              borderColor: '#C0C0C0',
+              backgroundColor: 'rgba(192, 192, 192, .2)',
+              fill: false,
+              tension: 0.2,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          interaction: {
+            mode: 'nearest',
+            axis: 'x',
+            intersect: false,
+          },
+          plugins: {
+            tooltip: {
+              callbacks: {
+                afterBody: function (context) {
+                  const idx = context[0].dataIndex;
+                  if (monthlyGains[idx]) {
+                    return `Projected invested value: R${monthlyGains[idx].value}`;
+                  }
+                  return undefined;
+                },
+              },
+            },
+            legend: {
+              position: 'top',
+            },
+          },
+          scales: {
+            x: {
+              title: {
+                display: true,
+                text: 'Month',
+              },
+            },
+            y: {
+              title: {
+                display: true,
+                text: 'Price (USD)',
+              },
+            },
+          },
+        },
+      });
+    </script>
+  </body>
+</html>

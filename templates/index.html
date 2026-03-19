@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Takeout vs Cooking Regret Meter</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Takeout vs Cooking Regret Meter</h1>
+      <p>Enter your takeout expense and see how much regret you might feel later.</p>
+
+      <form action="{{ url_for('result') }}" method="post" novalidate>
+        <div class="field">
+          <label for="amount">Takeout Price (R)</label>
+          <input
+            id="amount"
+            name="amount"
+            type="number"
+            step="0.01"
+            min="0.01"
+            required
+            placeholder="e.g. 120"
+          />
+        </div>
+
+        <div class="field">
+          <label for="category">Food Category</label>
+          <select id="category" name="category" required>
+            <option value="burgers">Burgers</option>
+            <option value="pizza">Pizza</option>
+            <option value="chinese">Chinese</option>
+            <option value="coffee">Coffee</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="delivery">Order Option</label>
+          <select id="delivery" name="delivery" required>
+            <option value="pickup">Pickup (R0)</option>
+            <option value="delivery">Delivery (+R50)</option>
+          </select>
+        </div>
+
+        <button type="submit" class="btn">Calculate Regret</button>
+      </form>
+
+      <section class="notes">
+        <h2>How it works</h2>
+        <p>
+          We compare the takeout price to a home-cooked baseline and apply a
+          commodity growth component using gold and silver data.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>
