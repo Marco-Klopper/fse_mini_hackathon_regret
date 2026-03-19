@@ -17,7 +17,8 @@
         <div class="score-level">{{ regret_level }}</div>
       </div>
 
-      <section class="summary">
+      <section class="section-card summary">
+        <h2>Summary</h2>
         <p>
           You spent <strong>R{{ amount }}</strong> on <strong>{{ category }}</strong>
           with <strong>{{ delivery }}</strong>. Home cost: R{{ home_cost }}; fee: R{{ fee }}.
@@ -29,7 +30,12 @@
         </p>
       </section>
 
-      <section class="chart-wrap">
+      <section class="section-card chart-wrap">
+        <h2>Commodity Price Trend (Last 12 Months)</h2>
+        <canvas id="commodityChart" width="800" height="400"></canvas>
+      </section>
+
+      <section class="section-card gains">
         <h2>Commodity Price Trend (Last 12 Months)</h2>
         <canvas id="commodityChart" width="800" height="400"></canvas>
       </section>
