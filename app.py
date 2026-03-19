@@ -1,11 +1,12 @@
 from datetime import datetime
 import os
-from math import isfinite
+import requests
 
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'dev_secret')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///regret.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -47,6 +48,51 @@ DEFAULT_COMMODITY_SERIES = [
 ]
 
 
+def get_commodity_series():
+    api_key = os.getenv('ALPHAVANTAGE_API_KEY')
+    if not api_key:
+        return DEFAULT_COMMODITY_SERIES
+
+    def fetch(symbol):
+        url = 'https://www.alphavantage.co/query'
+        params = {
+            'function': 'TIME_SERIES_MONTHLY',
+            'symbol': symbol,
+            'apikey': api_key,
+        }
+        try:
+            r = requests.get(url, params=params, timeout=10)
+            r.raise_for_status()
+            data = r.json()
+            timeseries = data.get('Monthly Time Series', {})
+            if not timeseries:
+                return None
+            # sort descending date and take last 12 months oldest to newest.
+            dates = sorted(timeseries.keys())[-12:]
+            return [
+                {
+                    'month': d,
+                    'gold': float(timeseries[d]['4. close']) if symbol == 'GLD' else None,
+                    'silver': float(timeseries[d]['4. close']) if symbol == 'SLV' else None,
+                }
+                for d in dates
+            ]
+        except Exception:
+            return None
+
+    gld = fetch('GLD')
+    slv = fetch('SLV')
+
+    if not gld or not slv or len(gld) != len(slv):
+        return DEFAULT_COMMODITY_SERIES
+
+    merged = []
+    for i in range(len(gld)):
+        merged.append({'month': gld[i]['month'], 'gold': gld[i]['gold'], 'silver': slv[i]['silver']})
+
+    return merged
+
+
 def compute_regret(amount, category, delivery):
     home_cost = HOME_PRICES.get(category, HOME_PRICES['other'])
     fee = DELIVERY_FEE if delivery == 'delivery' else 0.0
@@ -56,10 +102,11 @@ def compute_regret(amount, category, delivery):
     if amount > 0:
         savings_ratio = (difference_saved / amount) * 100
 
-    gold_start = DEFAULT_COMMODITY_SERIES[0]['gold']
-    gold_end = DEFAULT_COMMODITY_SERIES[-1]['gold']
-    silver_start = DEFAULT_COMMODITY_SERIES[0]['silver']
-    silver_end = DEFAULT_COMMODITY_SERIES[-1]['silver']
+    series = get_commodity_series()
+    gold_start = series[0]['gold']
+    gold_end = series[-1]['gold']
+    silver_start = series[0]['silver']
+    silver_end = series[-1]['silver']
 
     gold_growth = ((gold_end - gold_start) / gold_start * 100) if gold_start else 0.0
     silver_growth = ((silver_end - silver_start) / silver_start * 100) if silver_start else 0.0
@@ -90,12 +137,13 @@ def compute_regret(amount, category, delivery):
         investment = 0
 
     cumulative_invested = 0
-    for idx, point in enumerate(DEFAULT_COMMODITY_SERIES, start=1):
+    for idx, point in enumerate(series, start=1):
         if idx == 1:
             cumulative_invested = investment
         else:
-            monthly_gain_pct = ((point['gold'] / DEFAULT_COMMODITY_SERIES[idx-2]['gold'] - 1.0) +
-                                 (point['silver'] / DEFAULT_COMMODITY_SERIES[idx-2]['silver'] - 1.0)) / 2.0
+            previous = series[idx-2]
+            monthly_gain_pct = ((point['gold'] / previous['gold'] - 1.0) +
+                                 (point['silver'] / previous['silver'] - 1.0)) / 2.0
             cumulative_invested *= 1 + monthly_gain_pct
         monthly_gains.append({'month': point['month'], 'value': round(cumulative_invested, 2)})
 
@@ -112,7 +160,7 @@ def compute_regret(amount, category, delivery):
         'regret_level': level,
         'regret_color': color,
         'monthly_gains': monthly_gains,
-        'commodity_series': DEFAULT_COMMODITY_SERIES,
+        'commodity_series': series,
     }
 
 
@@ -126,7 +174,11 @@ def result():
     try:
         amount = float(request.form.get('amount', '0'))
     except ValueError:
-        amount = 0.0
+        amount = None
+
+    if amount is None or amount <= 0:
+        flash('Please enter a valid positive amount for takeout price.')
+        return redirect(url_for('home'))
 
     category = request.form.get('category', 'other')
     delivery = request.form.get('delivery', 'pickup')

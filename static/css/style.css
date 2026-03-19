@@ -70,6 +70,15 @@ button.btn:hover {
   opacity: 0.95;
 }
 
+.flash-message {
+  border: 1px solid #f87171;
+  background: rgba(248, 113, 113, 0.15);
+  color: #fee2e2;
+  padding: 0.8rem;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+}
+
 .back {
   display: inline-block;
   margin-bottom: 1rem;
